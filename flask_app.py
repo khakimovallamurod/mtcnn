@@ -5,34 +5,39 @@ import tempfile
 
 app = Flask(__name__)
 
-# Haar cascade faylini yuklash
+# Haar kaskad faylini yuklab oling (OpenCV bilan birga keladi)
 face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
+
+def detect_faces(image):
+    # OpenCV faqat BGR formatda ishlaydi
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5)
+    return faces
+
+def draw_faces(image, faces):
+    for (x, y, w, h) in faces:
+        cv2.rectangle(image, (x, y), (x + w, y + h), (0, 255, 0), 2)
+    return image
 
 @app.route('/detect', methods=['POST'])
 def detect():
     if 'image' not in request.files:
-        return jsonify({"error": "Rasm yuborilmadi"}), 400
-
+        return jsonify({"error": "Iltimos, 'image' nomli fayl yuboring."}), 400
+    
     file = request.files['image']
     if file.filename == '':
-        return jsonify({"error": "Fayl nomi yo'q"}), 400
+        return jsonify({"error": "Rasm tanlanmagan."}), 400
 
-    # Faylni o'qish
+    # Rasmni o‘qish
     file_bytes = np.frombuffer(file.read(), np.uint8)
     image = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
 
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    faces = detect_faces(image)
+    result_image = draw_faces(image, faces)
 
-    # Yuzlarni aniqlash
-    faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5)
-
-    # Yuzlar atrofiga to‘rtburchak chizish
-    for (x, y, w, h) in faces:
-        cv2.rectangle(image, (x, y), (x + w, y + h), (0, 0, 255), 2)
-
-    # Vaqtinchalik rasm faylini saqlash
+    # Natijaviy rasmni vaqtincha faylga yozamiz
     temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.jpg')
-    cv2.imwrite(temp_file.name, image)
+    cv2.imwrite(temp_file.name, result_image)
 
     return send_file(temp_file.name, mimetype='image/jpeg')
 
